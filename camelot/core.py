@@ -219,10 +219,11 @@ class TextEdges:
 
         # add some padding to table areas
         table_areas_padded = {}
+        table_areas_unpadded = {}
         for area in table_areas:
             table_areas_padded[pad(area, average_textline_height)] = None
-
-        return table_areas_padded
+            table_areas_unpadded[pad(area, average_textline_height)] = area
+        return table_areas_padded, table_areas_unpadded
 
 
 class Cell:

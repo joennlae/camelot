@@ -1,17 +1,15 @@
-import logging
+# -*- coding: utf-8 -*-
+
 import os
+import logging
 import warnings
 
 import numpy as np
 import pandas as pd
 
-from ..core import Table
-from ..core import TextEdges
-from ..utils import compute_accuracy
-from ..utils import compute_whitespace
-from ..utils import get_table_index
-from ..utils import text_in_bbox
 from .base import BaseParser
+from ..core import TextEdges, Table
+from ..utils import text_in_bbox, get_table_index, compute_accuracy, compute_whitespace
 
 
 logger = logging.getLogger("camelot")
@@ -96,15 +94,10 @@ class Stream(BaseParser):
             Tuple (x0, y0, x1, y1) in pdf coordinate space.
 
         """
-        xmin = 0
-        ymin = 0
-        xmax = 0
-        ymax = 0
-        if len([t.x0 for direction in t_bbox for t in t_bbox[direction]]) > 0:
-            xmin = min([t.x0 for direction in t_bbox for t in t_bbox[direction]])
-            ymin = min([t.y0 for direction in t_bbox for t in t_bbox[direction]])
-            xmax = max([t.x1 for direction in t_bbox for t in t_bbox[direction]])
-            ymax = max([t.y1 for direction in t_bbox for t in t_bbox[direction]])
+        xmin = min([t.x0 for direction in t_bbox for t in t_bbox[direction]])
+        ymin = min([t.y0 for direction in t_bbox for t in t_bbox[direction]])
+        xmax = max([t.x1 for direction in t_bbox for t in t_bbox[direction]])
+        ymax = max([t.y1 for direction in t_bbox for t in t_bbox[direction]])
         text_bbox = (xmin, ymin, xmax, ymax)
         return text_bbox
 
@@ -291,12 +284,13 @@ class Stream(BaseParser):
         relevant_textedges = textedges.get_relevant()
         self.textedges.extend(relevant_textedges)
         # guess table areas using textlines and relevant edges
-        table_bbox = textedges.get_table_areas(textlines, relevant_textedges)
+        table_bbox, table_bbox_unpadded = textedges.get_table_areas(textlines, relevant_textedges)
         # treat whole page as table area if no table areas found
         if not len(table_bbox):
             table_bbox = {(0, 0, self.pdf_width, self.pdf_height): None}
+            table_bbox_unpadded = {(0, 0, self.pdf_width, self.pdf_height): None}
 
-        return table_bbox
+        return table_bbox, table_bbox_unpadded
 
     def _generate_table_bbox(self):
         self.textedges = []
@@ -314,7 +308,7 @@ class Stream(BaseParser):
                     region_text = text_in_bbox((x1, y2, x2, y1), self.horizontal_text)
                     hor_text.extend(region_text)
             # find tables based on nurminen's detection algorithm
-            table_bbox = self._nurminen_table_detection(hor_text)
+            table_bbox, table_bbox_unpadded = self._nurminen_table_detection(hor_text)
         else:
             table_bbox = {}
             for area in self.table_areas:
@@ -325,6 +319,7 @@ class Stream(BaseParser):
                 y2 = float(y2)
                 table_bbox[(x1, y2, x2, y1)] = None
         self.table_bbox = table_bbox
+        self.table_bbox_unpadded = table_bbox_unpadded
 
     def _generate_columns_and_rows(self, table_idx, tk):
         # select elements which lie within table_bbox
@@ -470,6 +465,7 @@ class Stream(BaseParser):
             cols, rows = self._generate_columns_and_rows(table_idx, tk)
             table = self._generate_table(table_idx, cols, rows)
             table._bbox = tk
+            table._bbox_unpadded = self.table_bbox_unpadded[tk]
             _tables.append(table)
 
         return _tables
